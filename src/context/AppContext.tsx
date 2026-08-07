@@ -1,0 +1,128 @@
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth'
+import {
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore'
+import { auth, db, firebaseReady } from '../lib/firebase'
+import { refreshTokenIfGranted } from '../lib/messaging'
+import type { NotifyPrefs, NotifyType, WatchlistEntry } from '../types/models'
+
+interface TrackableMovie {
+  id: number
+  title: string
+  poster_path: string | null
+  release_date?: string
+}
+
+interface AppState {
+  uid: string | null
+  ready: boolean
+  watchlist: Map<number, WatchlistEntry>
+  isTracked: (movieId: number) => boolean
+  track: (movie: TrackableMovie) => Promise<void>
+  untrack: (movieId: number) => Promise<void>
+  setNotify: (movieId: number, type: NotifyType, value: boolean) => Promise<void>
+}
+
+const DEFAULT_PREFS: NotifyPrefs = { digital: true, rentBuy: false, free: true }
+
+const AppContext = createContext<AppState | null>(null)
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [uid, setUid] = useState<string | null>(null)
+  const [ready, setReady] = useState(!firebaseReady)
+  const [watchlist, setWatchlist] = useState<Map<number, WatchlistEntry>>(new Map())
+
+  useEffect(() => {
+    if (!firebaseReady) return
+    return onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUid(user.uid)
+        setReady(true)
+        setDoc(
+          doc(db, 'users', user.uid),
+          { lastSeenAt: serverTimestamp(), defaults: DEFAULT_PREFS },
+          { merge: true },
+        ).catch(() => {})
+        refreshTokenIfGranted(user.uid)
+      } else {
+        signInAnonymously(auth).catch((err) => {
+          console.error('anonymous sign-in failed', err)
+          setReady(true)
+        })
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!uid) return
+    return onSnapshot(
+      collection(db, 'users', uid, 'watchlist'),
+      (snap) => {
+        const next = new Map<number, WatchlistEntry>()
+        snap.forEach((d) => {
+          const data = d.data() as WatchlistEntry
+          next.set(data.movieId, data)
+        })
+        setWatchlist(next)
+      },
+      // Without this the SDK throws an unhandled rejection when Firestore is
+      // unreachable or rules reject the read; the app should just show an
+      // empty list instead.
+      (err) => console.error('watchlist listener failed', err),
+    )
+  }, [uid])
+
+  const value = useMemo<AppState>(
+    () => ({
+      uid,
+      ready,
+      watchlist,
+      isTracked: (movieId) => watchlist.has(movieId),
+      track: async (movie) => {
+        if (!uid) return
+        await setDoc(doc(db, 'users', uid, 'watchlist', String(movie.id)), {
+          movieId: movie.id,
+          title: movie.title,
+          posterPath: movie.poster_path ?? null,
+          releaseDate: movie.release_date ?? null,
+          addedAt: serverTimestamp(),
+          notify: DEFAULT_PREFS,
+          notified: { digital: null, rentBuy: null, free: null },
+        })
+      },
+      untrack: async (movieId) => {
+        if (!uid) return
+        await deleteDoc(doc(db, 'users', uid, 'watchlist', String(movieId)))
+      },
+      setNotify: async (movieId, type, val) => {
+        if (!uid) return
+        await updateDoc(doc(db, 'users', uid, 'watchlist', String(movieId)), {
+          [`notify.${type}`]: val,
+        })
+      },
+    }),
+    [uid, ready, watchlist],
+  )
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>
+}
+
+export function useApp(): AppState {
+  const ctx = useContext(AppContext)
+  if (!ctx) throw new Error('useApp outside AppProvider')
+  return ctx
+}

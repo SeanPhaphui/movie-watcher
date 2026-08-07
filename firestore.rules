@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /watchlist/{movieId} {
+        allow read, delete: if request.auth != null && request.auth.uid == uid;
+        allow create: if request.auth != null && request.auth.uid == uid;
+        // The checker (Admin SDK, bypasses rules) owns `notified` and `status`;
+        // clients may only change their own notification preferences.
+        allow update: if request.auth != null && request.auth.uid == uid
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['notified', 'status']);
+      }
+
+      match /fcmTokens/{tokenId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Global availability snapshots: written only by the Admin SDK checker.
+    match /movies/{movieId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
