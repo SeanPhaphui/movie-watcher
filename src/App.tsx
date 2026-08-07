@@ -2,6 +2,7 @@ import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-do
 import { AppProvider, useApp } from './context/AppContext'
 import { BottomNav } from './components/BottomNav'
 import { IntroSheet } from './components/IntroSheet'
+import { ScrollManager } from './components/ScrollManager'
 import { BellIcon } from './components/Icons'
 import { Home } from './pages/Home'
 import { Search } from './pages/Search'
@@ -32,6 +33,7 @@ export default function App() {
   return (
     <AppProvider>
       <BrowserRouter>
+        <ScrollManager />
         <Header />
         <main>
           <Routes>

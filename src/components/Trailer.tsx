@@ -1,39 +1,92 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { VideoEntry } from '../lib/tmdb'
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+declare global {
+  interface Window {
+    YT?: any
+    onYouTubeIframeAPIReady?: () => void
+  }
+}
+
+// If the player never reports ready — script blocked, offline, API change —
+// show it anyway rather than hiding the trailer forever behind a poster.
+const READY_FALLBACK_MS = 4000
+
+let apiPromise: Promise<void> | null = null
+
+/** Loads YouTube's iframe API once per page, whoever asks first. */
+function loadYouTubeApi(): Promise<void> {
+  if (apiPromise) return apiPromise
+  apiPromise = new Promise<void>((resolve) => {
+    if (window.YT?.Player) return resolve()
+    const previous = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.()
+      resolve()
+    }
+    const script = document.createElement('script')
+    script.src = 'https://www.youtube.com/iframe_api'
+    script.async = true
+    document.head.appendChild(script)
+  })
+  return apiPromise
+}
+
 /**
- * Click-to-play: shows YouTube's poster frame and only mounts the iframe on
- * demand, so the detail page never pays for an embed nobody watches.
+ * YouTube's own play button is the single tap, so the trailer starts with
+ * sound — autoplay would be permitted only while muted, and a silent trailer
+ * is worse than a tap.
+ *
+ * The white flash this used to show came from revealing the iframe on its
+ * `load` event: that fires when the embed's document loads, while the player
+ * itself paints some frames later, so a blank white page was briefly visible
+ * on a near-black screen. The iframe API's `onReady` is the signal that the
+ * player has actually rendered, so we hold our own poster over it until then
+ * and the swap is invisible.
  */
 export function Trailer({ video }: { video: VideoEntry }) {
-  const [playing, setPlaying] = useState(false)
+  const mountRef = useRef<HTMLDivElement>(null)
+  const [ready, setReady] = useState(false)
 
-  if (playing) {
-    return (
-      <div className="trailer">
-        <iframe
-          src={`https://www.youtube-nocookie.com/embed/${video.key}?autoplay=1`}
-          title={video.name}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        />
-      </div>
-    )
-  }
+  useEffect(() => {
+    let player: any
+    let cancelled = false
+    const fallback = setTimeout(() => setReady(true), READY_FALLBACK_MS)
+
+    loadYouTubeApi().then(() => {
+      if (cancelled || !mountRef.current) return
+      player = new window.YT.Player(mountRef.current, {
+        videoId: video.key,
+        host: 'https://www.youtube-nocookie.com',
+        playerVars: { playsinline: 1, rel: 0 },
+        events: {
+          onReady: () => {
+            if (!cancelled) setReady(true)
+          },
+        },
+      })
+    })
+
+    return () => {
+      cancelled = true
+      clearTimeout(fallback)
+      player?.destroy?.()
+    }
+  }, [video.key])
 
   return (
-    <button className="trailer trailer-cover" onClick={() => setPlaying(true)}>
+    <div className="trailer">
+      {/* 4:3 source, cropped by object-fit to drop YouTube's letterbox bars. */}
       <img
+        className="trailer-poster"
         src={`https://i.ytimg.com/vi/${video.key}/hqdefault.jpg`}
         alt=""
-        loading="lazy"
+        aria-hidden="true"
       />
-      <span className="trailer-play" aria-hidden="true">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M8 5.5v13l11-6.5z" />
-        </svg>
-      </span>
-      <span className="trailer-label">Play trailer</span>
-    </button>
+      <div className={`trailer-player${ready ? ' ready' : ''}`}>
+        <div ref={mountRef} />
+      </div>
+    </div>
   )
 }

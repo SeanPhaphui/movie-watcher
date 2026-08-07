@@ -22,15 +22,43 @@ import { loadServiceAccount, loadTmdbToken } from './lib/credentials.mjs'
 // A movie with nothing left to notify still gets re-checked this often, so
 // badges stay honest and no TMDB content is cached beyond its 6-month limit.
 const STALE_DAYS = 14
-const FETCH_CONCURRENCY = 8 // TMDB allows ~50 req/s; this is deliberately gentle
+const FETCH_CONCURRENCY = 8 // in-flight cap; the throttle below bounds the rate
 const GET_ALL_CHUNK = 300
 
-async function fetchMovie(id, token) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Concurrency alone does not bound request rate — it bounds in-flight requests.
+// When TMDB is responding in ~130ms, 8 in flight is ~60 req/s, past their
+// ~40/s ceiling. Spacing the *starts* caps throughput no matter how fast
+// responses come back.
+const MIN_REQUEST_INTERVAL_MS = 50 // ~20 req/s
+const MAX_RETRIES = 3
+
+let nextSlot = 0
+async function throttle() {
+  const now = Date.now()
+  const slot = Math.max(now, nextSlot)
+  nextSlot = slot + MIN_REQUEST_INTERVAL_MS
+  if (slot > now) await sleep(slot - now)
+}
+
+async function fetchMovie(id, token, attempt = 0) {
+  await throttle()
   const res = await fetch(
     `https://api.themoviedb.org/3/movie/${id}?append_to_response=release_dates,watch/providers`,
     { headers: { Authorization: `Bearer ${token}` } },
   )
   if (res.status === 404) return null
+
+  // Being rate limited used to drop the movie for the whole run, delaying a
+  // release alert by up to six hours. Back off and retry instead.
+  if (res.status === 429 && attempt < MAX_RETRIES) {
+    const wait = Number(res.headers.get('retry-after')) || 2 ** attempt
+    console.warn(`  rate limited on ${id}, retrying in ${wait}s`)
+    await sleep(wait * 1000)
+    return fetchMovie(id, token, attempt + 1)
+  }
+
   if (!res.ok) throw new Error(`TMDB ${res.status} for movie ${id}`)
   return res.json()
 }
@@ -98,7 +126,7 @@ async function main() {
     try {
       return { id, movie: await fetchMovie(id, tmdbToken) }
     } catch (err) {
-      console.warn(`skip ${id}: ${err.message}`)
+      console.warn(`skip ${id} this run (${err.message}) — still pending, retried next run`)
       return { id, movie: null }
     }
   })

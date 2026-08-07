@@ -80,7 +80,7 @@ export function ProviderList({ availability }: { availability: UsAvailability })
           )}
         </>
       )}
-      <div className="justwatch">Streaming data by JustWatch, via TMDB</div>
+      <div className="justwatch">Ratings and film data from TMDB · streaming data by JustWatch</div>
     </div>
   )
 }

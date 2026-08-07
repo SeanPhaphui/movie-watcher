@@ -8,6 +8,11 @@ import App from './App'
 
 registerSW({ immediate: true })
 
+// ScrollManager owns this. Left on 'auto', the browser also restores scroll —
+// but it does so against a page that has not rendered its list yet, so it
+// clamps to a short document and fights our restore.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
