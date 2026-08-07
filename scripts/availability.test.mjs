@@ -6,6 +6,8 @@ import {
   composeMessage,
   deriveStatus,
   hasPendingWatcher,
+  isOnMyServices,
+  pickSubscription,
   sameStatus,
   shouldCheck,
 } from './lib/availability.mjs'
@@ -138,6 +140,68 @@ test('within the same tier, display_priority breaks the tie', () => {
   assert.equal(s.providers.flatrate[0].name, 'Disney Plus')
 })
 
+// ── per-user services: the "free" alert must respect what you subscribe to ──
+
+const NETFLIX = 8
+const MAX = 1899
+const DISNEY = 337
+
+test('no services chosen = alert on any service (the default)', () => {
+  const s = computeState(movie({ us: { flatrate: [provider(MAX, 'HBO Max')] } }), TODAY)
+  assert.equal(isOnMyServices(s, []), true)
+  assert.equal(isOnMyServices(s, undefined), true)
+})
+
+test('title on a service you have fires the alert', () => {
+  const s = computeState(movie({ us: { flatrate: [provider(MAX, 'HBO Max')] } }), TODAY)
+  assert.equal(isOnMyServices(s, [MAX, NETFLIX]), true)
+})
+
+test('title on a service you do NOT have does not fire', () => {
+  const s = computeState(movie({ us: { flatrate: [provider(MAX, 'HBO Max')] } }), TODAY)
+  assert.equal(isOnMyServices(s, [NETFLIX, DISNEY]), false)
+})
+
+test('ad-supported and free tiers count toward your services too', () => {
+  const s = computeState(movie({ us: { ads: [provider(613, 'Freevee')] } }), TODAY)
+  assert.equal(isOnMyServices(s, [613]), true)
+  assert.equal(isOnMyServices(s, [NETFLIX]), false)
+})
+
+test('rent/buy availability never counts as being on your services', () => {
+  const s = computeState(movie({ us: { rent: [provider(2, 'Apple TV')] } }), TODAY)
+  assert.equal(isOnMyServices(s, [2]), false)
+})
+
+test('the named service is the one you actually have, not the top-ranked one', () => {
+  const s = computeState(
+    movie({ us: { flatrate: [provider(MAX, 'HBO Max'), provider(NETFLIX, 'Netflix')] } }),
+    TODAY,
+  )
+  const pick = pickSubscription(s, [NETFLIX])
+  assert.equal(pick.provider.name, 'Netflix')
+  assert.equal(pick.mine, true)
+})
+
+test('badge says "yours" only when it is on a service you have', () => {
+  const s = computeState(movie({ us: { flatrate: [provider(MAX, 'HBO Max')] } }), TODAY)
+  assert.deepEqual(deriveStatus(s, [MAX]), { kind: 'streaming', service: 'HBO Max', mine: true })
+  assert.deepEqual(deriveStatus(s, [NETFLIX]), { kind: 'streaming', service: 'HBO Max', mine: false })
+})
+
+test('notification copy changes when it is on your own service', () => {
+  const s = computeState(movie({ us: { flatrate: [provider(MAX, 'HBO Max')] } }), TODAY)
+  assert.match(composeMessage('free', 'Dune', s, [MAX]).body, /your HBO Max/)
+  assert.match(composeMessage('free', 'Dune', s, [NETFLIX]).body, /included with a subscription/)
+})
+
+test('sameStatus notices a change in ownership alone', () => {
+  const a = { kind: 'streaming', service: 'HBO Max', mine: false }
+  const b = { kind: 'streaming', service: 'HBO Max', mine: true }
+  assert.equal(sameStatus(a, b), false)
+  assert.equal(sameStatus(a, { ...a }), true)
+})
+
 // ── denormalized badge status ──
 
 test('subscription streaming outranks rent/buy in the badge', () => {
@@ -145,17 +209,17 @@ test('subscription streaming outranks rent/buy in the badge', () => {
     movie({ us: { flatrate: [provider(8, 'Netflix')], rent: [provider(2, 'Apple TV')] } }),
     TODAY,
   )
-  assert.deepEqual(deriveStatus(s), { kind: 'streaming', service: 'Netflix' })
+  assert.deepEqual(deriveStatus(s), { kind: 'streaming', service: 'Netflix', mine: false })
 })
 
 test('rent/buy only yields a rentBuy badge naming the store', () => {
   const s = computeState(movie({ us: { rent: [provider(2, 'Apple TV')] } }), TODAY)
-  assert.deepEqual(deriveStatus(s), { kind: 'rentBuy', service: 'Apple TV' })
+  assert.deepEqual(deriveStatus(s), { kind: 'rentBuy', service: 'Apple TV', mine: false })
 })
 
 test('digital date passed with no providers yields a bare digital badge', () => {
   const s = computeState(movie({ dates: [{ type: 4, release_date: '2026-07-01T00:00:00.000Z' }] }), TODAY)
-  assert.deepEqual(deriveStatus(s), { kind: 'digital', service: null })
+  assert.deepEqual(deriveStatus(s), { kind: 'digital', service: null, mine: false })
 })
 
 test('nothing available yields null so the client falls back to release date', () => {

@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { enableNotifications, getPushStatus, type PushStatus } from '../lib/messaging'
 import { useApp } from '../context/AppContext'
 import { BellIcon } from '../components/Icons'
+import { showIntro } from '../components/IntroSheet'
+import { ServicePicker } from '../components/ServicePicker'
 
 export function Settings() {
-  const { uid } = useApp()
+  const { uid, services } = useApp()
   const [status, setStatus] = useState<PushStatus>(getPushStatus())
   const [busy, setBusy] = useState(false)
 
@@ -62,8 +64,26 @@ export function Settings() {
       </div>
 
       <div className="settings-card">
+        <h3>My services</h3>
+        <p>
+          Pick what you subscribe to and the &ldquo;free with subscription&rdquo; alert will only
+          fire when a tracked film lands somewhere you can actually watch it.
+          {services.length === 0 && ' Until you choose, we alert on any service.'}
+        </p>
+        <ServicePicker />
+      </div>
+
+      <div className="settings-card">
         <h3>Region</h3>
         <p>Streaming availability is shown for the United States.</p>
+      </div>
+
+      <div className="settings-card">
+        <h3>How Marquee works</h3>
+        <p>A quick tour of what the app tracks and the alerts you can turn on.</p>
+        <button className="btn btn-ghost" onClick={showIntro}>
+          Show the intro again
+        </button>
       </div>
 
       <div className="notice">

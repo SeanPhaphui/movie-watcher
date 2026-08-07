@@ -31,10 +31,13 @@ interface AppState {
   uid: string | null
   ready: boolean
   watchlist: Map<number, WatchlistEntry>
+  /** TMDB provider ids the user says they subscribe to. Empty = not specified. */
+  services: number[]
   isTracked: (movieId: number) => boolean
   track: (movie: TrackableMovie) => Promise<void>
   untrack: (movieId: number) => Promise<void>
   setNotify: (movieId: number, type: NotifyType, value: boolean) => Promise<void>
+  toggleService: (providerId: number) => Promise<void>
 }
 
 const DEFAULT_PREFS: NotifyPrefs = { digital: true, rentBuy: false, free: true }
@@ -45,6 +48,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [uid, setUid] = useState<string | null>(null)
   const [ready, setReady] = useState(!firebaseReady)
   const [watchlist, setWatchlist] = useState<Map<number, WatchlistEntry>>(new Map())
+  const [services, setServices] = useState<number[]>([])
 
   useEffect(() => {
     if (!firebaseReady) return
@@ -86,12 +90,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     )
   }, [uid])
 
+  useEffect(() => {
+    if (!uid) return
+    return onSnapshot(
+      doc(db, 'users', uid),
+      (snap) => setServices((snap.data()?.services as number[] | undefined) ?? []),
+      (err) => console.error('user prefs listener failed', err),
+    )
+  }, [uid])
+
   const value = useMemo<AppState>(
     () => ({
       uid,
       ready,
       watchlist,
+      services,
       isTracked: (movieId) => watchlist.has(movieId),
+      toggleService: async (providerId) => {
+        if (!uid) return
+        const next = services.includes(providerId)
+          ? services.filter((id) => id !== providerId)
+          : [...services, providerId]
+        await setDoc(doc(db, 'users', uid), { services: next }, { merge: true })
+      },
       track: async (movie) => {
         if (!uid) return
         await setDoc(doc(db, 'users', uid, 'watchlist', String(movie.id)), {
@@ -115,7 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })
       },
     }),
-    [uid, ready, watchlist],
+    [uid, ready, watchlist, services],
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

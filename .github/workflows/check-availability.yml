@@ -15,6 +15,37 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+
+      # Fails with a precise message instead of a stack trace. Prints only
+      # shapes and lengths — never the secret values themselves.
+      - name: Preflight — verify secrets
+        env:
+          TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          fail=0
+          if [ -z "$TMDB_TOKEN" ]; then
+            echo "::error::Secret TMDB_TOKEN is missing or empty. Add it under Settings > Secrets and variables > Actions > Repository secrets (not Variables, and not an Environment secret)."
+            fail=1
+          else
+            echo "TMDB_TOKEN present (${#TMDB_TOKEN} chars)"
+          fi
+
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::Secret FIREBASE_SERVICE_ACCOUNT is missing or empty. Paste the entire service-account JSON file contents as the value."
+            fail=1
+          else
+            echo "FIREBASE_SERVICE_ACCOUNT present (${#FIREBASE_SERVICE_ACCOUNT} chars)"
+            if ! printf '%s' "$FIREBASE_SERVICE_ACCOUNT" | head -c 1 | grep -q '{'; then
+              echo "::error::FIREBASE_SERVICE_ACCOUNT does not start with '{'. Paste the raw JSON, not a file path, base64, or a quoted string."
+              fail=1
+            fi
+            if ! printf '%s' "$FIREBASE_SERVICE_ACCOUNT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);for(const k of ["project_id","private_key","client_email"])if(!j[k])throw new Error("missing field: "+k);console.log("service account OK for "+j.project_id)}catch(e){console.error("::error::FIREBASE_SERVICE_ACCOUNT is not valid: "+e.message);process.exit(1)}})'; then
+              fail=1
+            fi
+          fi
+          exit $fail
+
       - run: node scripts/check-availability.mjs
         env:
           TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}

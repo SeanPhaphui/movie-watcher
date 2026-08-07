@@ -5,6 +5,7 @@ import { classifyUsAvailability, formatDate, isDigitallyAvailable } from '../lib
 import { useApp } from '../context/AppContext'
 import { ProviderList } from '../components/ProviderList'
 import { NotificationToggles } from '../components/NotificationToggles'
+import { NotifyPrompt } from '../components/NotifyPrompt'
 import { AdSlot } from '../components/AdSlot'
 import { BookmarkIcon } from '../components/Icons'
 
@@ -89,6 +90,7 @@ export function MovieDetail() {
         </button>
         {tracked && entry && (
           <>
+            <NotifyPrompt compact />
             <div className="section-label">Notify me</div>
             <NotificationToggles entry={entry} />
           </>

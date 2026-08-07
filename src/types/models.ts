@@ -11,6 +11,8 @@ export interface NotifyPrefs {
 export type WatchStatus = {
   kind: 'streaming' | 'rentBuy' | 'digital'
   service: string | null
+  /** True when `service` is one the user told us they subscribe to. */
+  mine?: boolean
 } | null
 
 export interface WatchlistEntry {

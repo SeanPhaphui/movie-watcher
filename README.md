@@ -109,6 +109,17 @@ To see what the checker has recorded and why a notification did or didn't fire:
 FIREBASE_SERVICE_ACCOUNT=path\to\key.json npm run inspect -- <uid>
 ```
 
+### Per-user services
+
+`users/{uid}.services` holds the TMDB provider ids a user says they subscribe to. The
+**"free with subscription" alert is the one event that depends on who is asking** — a film
+landing on Max means nothing to someone without Max — so the checker resolves it per watcher
+via `isOnMyServices`, and names the service *they* have via `pickSubscription`.
+
+An empty or absent `services` list means "hasn't told us" and falls back to alerting on any
+service. That fallback is deliberate: the failure mode of guessing wrong here is silently
+never notifying someone, which is worse than an occasional irrelevant alert.
+
 ### Provider ranking
 
 TMDB's `display_priority` cannot be used on its own to pick which service to name in a

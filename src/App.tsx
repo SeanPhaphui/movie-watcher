@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import { BottomNav } from './components/BottomNav'
+import { IntroSheet } from './components/IntroSheet'
 import { Home } from './pages/Home'
 import { Search } from './pages/Search'
 import { MovieDetail } from './pages/MovieDetail'
@@ -36,6 +37,7 @@ export default function App() {
           </Routes>
         </main>
         <BottomNav />
+        <IntroSheet />
       </BrowserRouter>
     </AppProvider>
   )

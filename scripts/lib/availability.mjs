@@ -66,6 +66,32 @@ export function computeState(movie, today = new Date().toISOString().slice(0, 10
   }
 }
 
+/** Every provider that carries the title on a subscription/free/ad-supported tier. */
+export const subscriptionProviders = (state) => [
+  ...state.providers.flatrate,
+  ...state.providers.free,
+  ...state.providers.ads,
+]
+
+/**
+ * Which subscription provider to name for this user. Prefers one they actually
+ * subscribe to; `mine` says whether we found such a match. An empty `services`
+ * list means "hasn't told us" — we fall back to naming the best provider
+ * overall rather than silently telling them nothing.
+ */
+export function pickSubscription(state, services = []) {
+  const subs = subscriptionProviders(state)
+  if (!subs.length) return null
+  const owned = services.length ? subs.find((p) => services.includes(p.id)) : null
+  return { provider: owned ?? subs[0], mine: Boolean(owned) }
+}
+
+/** Does this title stream on a service the user has? Unset services = any service. */
+export const isOnMyServices = (state, services = []) =>
+  services.length
+    ? subscriptionProviders(state).some((p) => services.includes(p.id))
+    : state.freeWithSub
+
 /**
  * Compact badge status denormalized onto each watchlist doc, so the client
  * renders badges from its existing realtime listener instead of doing one
@@ -73,29 +99,34 @@ export function computeState(movie, today = new Date().toISOString().slice(0, 10
  * Returns null when the movie has no digital presence yet — the client falls
  * back to in-theaters/coming-soon using the release date it already holds.
  */
-export function deriveStatus(state) {
+export function deriveStatus(state, services = []) {
   const first = (lists) => lists.flat().find(Boolean)?.name ?? null
   if (state.freeWithSub) {
-    return { kind: 'streaming', service: first([state.providers.flatrate, state.providers.free, state.providers.ads]) }
+    const pick = pickSubscription(state, services)
+    return { kind: 'streaming', service: pick?.provider.name ?? null, mine: pick?.mine ?? false }
   }
-  if (state.rentBuy) return { kind: 'rentBuy', service: first([state.providers.rent, state.providers.buy]) }
-  if (state.digitalReleased) return { kind: 'digital', service: null }
+  if (state.rentBuy)
+    return { kind: 'rentBuy', service: first([state.providers.rent, state.providers.buy]), mine: false }
+  if (state.digitalReleased) return { kind: 'digital', service: null, mine: false }
   return null
 }
 
 export const sameStatus = (a, b) =>
-  (a?.kind ?? null) === (b?.kind ?? null) && (a?.service ?? null) === (b?.service ?? null)
+  (a?.kind ?? null) === (b?.kind ?? null) &&
+  (a?.service ?? null) === (b?.service ?? null) &&
+  Boolean(a?.mine) === Boolean(b?.mine)
 
-export function composeMessage(type, title, state) {
+export function composeMessage(type, title, state, services = []) {
   const first = (lists) => lists.flat().find(Boolean)?.name
 
   if (type === 'free') {
-    const svc = first([state.providers.flatrate, state.providers.free, state.providers.ads])
+    const pick = pickSubscription(state, services)
+    if (!pick) return { title: `${title} is streaming now`, body: 'Included on a streaming service now.' }
     return {
       title: `${title} is streaming now`,
-      body: svc
-        ? `Watch it on ${svc} — included with your subscription.`
-        : 'Included on a streaming service now.',
+      body: pick.mine
+        ? `It's on your ${pick.provider.name} — watch it tonight.`
+        : `Watch it on ${pick.provider.name} — included with a subscription.`,
     }
   }
 

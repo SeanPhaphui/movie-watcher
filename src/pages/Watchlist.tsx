@@ -3,20 +3,25 @@ import { Link } from 'react-router-dom'
 import { imageUrl } from '../lib/tmdb'
 import { useApp } from '../context/AppContext'
 import { NotificationToggles } from '../components/NotificationToggles'
+import { NotifyPrompt } from '../components/NotifyPrompt'
 import { AdSlot } from '../components/AdSlot'
 import type { WatchlistEntry } from '../types/models'
 
 interface Badge {
   tone: 'gold' | 'green' | 'blue' | 'dim'
   text: string
+  mine?: boolean
 }
 
 // Reads only from the watchlist doc the realtime listener already delivers —
 // the checker denormalizes `status` onto it, so badges cost zero extra reads.
 function badgeFor(entry: WatchlistEntry): Badge {
   const status = entry.status
-  if (status?.kind === 'streaming')
+  if (status?.kind === 'streaming') {
+    if (status.mine && status.service)
+      return { tone: 'green', text: `On your ${status.service}`, mine: true }
     return { tone: 'green', text: status.service ? `Streaming on ${status.service}` : 'Streaming now' }
+  }
   if (status?.kind === 'rentBuy')
     return { tone: 'blue', text: status.service ? `Rent or buy on ${status.service}` : 'Available to rent or buy' }
   if (status?.kind === 'digital') return { tone: 'green', text: 'Digital release out' }
@@ -43,7 +48,9 @@ function WatchRow({ entry }: { entry: WatchlistEntry }) {
             {entry.title}
           </Link>
           <div>
-            <span className={`badge ${badge.tone}`}>{badge.text}</span>
+            <span className={`badge ${badge.tone}${badge.mine ? ' mine-badge' : ''}`}>
+              {badge.text}
+            </span>
           </div>
           <div className="watch-actions">
             <button onClick={() => setExpanded((e) => !e)}>
@@ -76,6 +83,7 @@ export function Watchlist() {
           Tap the bookmark on any movie and we&rsquo;ll watch for its streaming release.
         </div>
       )}
+      {entries.length > 0 && <NotifyPrompt />}
       {entries.map((e) => (
         <WatchRow key={e.movieId} entry={e} />
       ))}

@@ -82,5 +82,18 @@ export const getMovieDetail = (id: number) =>
     append_to_response: 'release_dates,watch/providers',
   })
 
+export interface ProviderCatalogEntry {
+  provider_id: number
+  provider_name: string
+  logo_path: string | null
+  display_priority: number
+}
+
+/** Full catalogue of US providers, for the "services I have" picker. */
+export const getProviderCatalog = () =>
+  tmdbFetch<{ results: ProviderCatalogEntry[] }>('/watch/providers/movie', {
+    watch_region: 'US',
+  })
+
 export const imageUrl = (path: string | null, size = 'w342') =>
   path ? `https://image.tmdb.org/t/p/${size}${path}` : null
