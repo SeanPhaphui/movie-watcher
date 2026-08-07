@@ -21,11 +21,23 @@ export function shouldCheck(watchers, lastCheckedMs, nowMs, staleDays = 14) {
 
 const toInfo = (p) => ({ id: p.provider_id, name: p.provider_name, logoPath: p.logo_path ?? null })
 
+// Resold add-ons ("HBO Max Amazon Channel") and live-TV bundles carry the title
+// but aren't the service a viewer thinks of as its home. TMDB's own
+// display_priority actively prefers them — it ranks the Amazon reseller of HBO
+// Max at 11 and HBO Max itself at 152 — so we rank direct services first and
+// only use display_priority to break ties within a tier.
+const RESOLD = /\bchannel\b/i
+const LIVE_TV = /^(youtube tv|fubotv|sling tv|directv(\s|$)|philo|hulu with live tv|spectrum on demand)/i
+
+const tier = (p) => (RESOLD.test(p.provider_name) ? 2 : LIVE_TV.test(p.provider_name) ? 1 : 0)
+
 export function dedupe(lists) {
   const seen = new Map()
   for (const list of lists)
-    for (const p of list ?? []) if (!seen.has(p.provider_id)) seen.set(p.provider_id, toInfo(p))
+    for (const p of list ?? []) if (!seen.has(p.provider_id)) seen.set(p.provider_id, p)
   return [...seen.values()]
+    .sort((a, b) => tier(a) - tier(b) || (a.display_priority ?? 999) - (b.display_priority ?? 999))
+    .map(toInfo)
 }
 
 /** @param today ISO yyyy-mm-dd; injectable so tests are deterministic. */

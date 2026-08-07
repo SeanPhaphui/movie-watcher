@@ -103,6 +103,21 @@ The workflow runs on a schedule and can be fired manually from the Actions tab
 (**Check streaming availability → Run workflow**) — useful for end-to-end testing.
 Run it locally with `TMDB_TOKEN=... FIREBASE_SERVICE_ACCOUNT=path\to\key.json npm run check`.
 
+To see what the checker has recorded and why a notification did or didn't fire:
+
+```sh
+FIREBASE_SERVICE_ACCOUNT=path\to\key.json npm run inspect -- <uid>
+```
+
+### Provider ranking
+
+TMDB's `display_priority` cannot be used on its own to pick which service to name in a
+notification: for *Dune: Part Two* it ranks "HBO Max Amazon Channel" at 11 and actual HBO Max
+at 152. `dedupe` in [scripts/lib/availability.mjs](scripts/lib/availability.mjs) therefore
+ranks direct services above live-TV bundles above resold add-ons, using `display_priority`
+only to break ties within a tier. If a notification ever names a weird reseller, that ranking
+is the place to look.
+
 > GitHub disables scheduled workflows after ~60 days without repo activity; an occasional
 > commit or manual run keeps it alive.
 

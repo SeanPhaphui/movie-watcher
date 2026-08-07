@@ -18,11 +18,21 @@ const toInfo = (p: WatchProviderEntry): ProviderInfo => ({
   logoPath: p.logo_path,
 })
 
+// Mirrors the ranking in scripts/lib/availability.mjs — see the note there on
+// why TMDB's display_priority can't be used on its own.
+const RESOLD = /\bchannel\b/i
+const LIVE_TV = /^(youtube tv|fubotv|sling tv|directv(\s|$)|philo|hulu with live tv|spectrum on demand)/i
+
+const tier = (p: WatchProviderEntry) =>
+  RESOLD.test(p.provider_name) ? 2 : LIVE_TV.test(p.provider_name) ? 1 : 0
+
 function dedupe(lists: WatchProviderEntry[][]): ProviderInfo[] {
-  const seen = new Map<number, ProviderInfo>()
+  const seen = new Map<number, WatchProviderEntry>()
   for (const list of lists)
-    for (const p of list) if (!seen.has(p.provider_id)) seen.set(p.provider_id, toInfo(p))
+    for (const p of list) if (!seen.has(p.provider_id)) seen.set(p.provider_id, p)
   return [...seen.values()]
+    .sort((a, b) => tier(a) - tier(b) || (a.display_priority ?? 999) - (b.display_priority ?? 999))
+    .map(toInfo)
 }
 
 export function classifyUsAvailability(detail: MovieDetail): UsAvailability {

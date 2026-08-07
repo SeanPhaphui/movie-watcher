@@ -89,6 +89,55 @@ test('digital message falls back gracefully with no providers', () => {
   assert.match(msg.body, /digital release/)
 })
 
+// ── provider ranking: resold add-ons must not become the headline service ──
+
+const prio = (id, name, display_priority) => ({
+  provider_id: id,
+  provider_name: name,
+  logo_path: `/${id}.jpg`,
+  display_priority,
+})
+
+test('direct service beats a resold channel despite worse display_priority', () => {
+  // Real TMDB data for Dune: Part Two — the Amazon reseller is ranked 11,
+  // actual HBO Max is 152.
+  const s = computeState(
+    movie({
+      us: {
+        flatrate: [
+          prio(1825, 'HBO Max Amazon Channel', 11),
+          prio(363, 'YouTube TV', 38),
+          prio(1899, 'HBO Max', 152),
+        ],
+      },
+    }),
+    TODAY,
+  )
+  assert.equal(s.providers.flatrate[0].name, 'HBO Max')
+  assert.equal(deriveStatus(s).service, 'HBO Max')
+})
+
+test('live-TV bundle ranks below a direct service but above a resold channel', () => {
+  const s = computeState(
+    movie({ us: { flatrate: [prio(1825, 'Starz Amazon Channel', 5), prio(363, 'YouTube TV', 38)] } }),
+    TODAY,
+  )
+  assert.deepEqual(s.providers.flatrate.map((p) => p.name), ['YouTube TV', 'Starz Amazon Channel'])
+})
+
+test('a resold channel is still used when it is the only option', () => {
+  const s = computeState(movie({ us: { flatrate: [prio(1825, 'Starz Apple TV Channel', 5)] } }), TODAY)
+  assert.equal(deriveStatus(s).service, 'Starz Apple TV Channel')
+})
+
+test('within the same tier, display_priority breaks the tie', () => {
+  const s = computeState(
+    movie({ us: { flatrate: [prio(8, 'Netflix', 40), prio(337, 'Disney Plus', 12)] } }),
+    TODAY,
+  )
+  assert.equal(s.providers.flatrate[0].name, 'Disney Plus')
+})
+
 // ── denormalized badge status ──
 
 test('subscription streaming outranks rent/buy in the badge', () => {

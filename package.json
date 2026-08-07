@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "node --test scripts/*.test.mjs",
     "test:rules": "node scripts/rules-test.mjs",
+    "inspect": "node scripts/inspect.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "check": "node scripts/check-availability.mjs",
     "deploy": "npm run build && firebase deploy --only hosting,firestore"
