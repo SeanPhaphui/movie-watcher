@@ -39,11 +39,33 @@ export interface WatchProvidersResult {
   >
 }
 
+export interface VideoEntry {
+  key: string
+  site: string
+  type: string
+  name: string
+  official: boolean
+  published_at: string
+}
+
 export interface MovieDetail extends MovieSummary {
   runtime: number | null
   genres: Array<{ id: number; name: string }>
+  vote_count: number
   release_dates: ReleaseDatesResult
   'watch/providers': WatchProvidersResult
+  videos: { results: VideoEntry[] }
+}
+
+/** Best YouTube trailer: official trailers first, then teasers, newest wins. */
+export function pickTrailer(videos: VideoEntry[] | undefined): VideoEntry | null {
+  const rank = (v: VideoEntry) =>
+    (v.type === 'Trailer' ? 0 : v.type === 'Teaser' ? 1 : 2) + (v.official ? 0 : 0.5)
+  const usable = (videos ?? []).filter((v) => v.site === 'YouTube' && v.key)
+  if (!usable.length) return null
+  return [...usable].sort(
+    (a, b) => rank(a) - rank(b) || (b.published_at ?? '').localeCompare(a.published_at ?? ''),
+  )[0]
 }
 
 export interface Paged<T> {
@@ -63,8 +85,26 @@ async function tmdbFetch<T>(path: string, params: Record<string, string> = {}): 
   return res.json() as Promise<T>
 }
 
+const daysAgo = (n: number) =>
+  new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
+
+/**
+ * What's actually in US theaters. `/movie/now_playing` returns ~275 titles
+ * because TMDB counts every micro and festival release — past page 4 they have
+ * zero votes and nobody has heard of them. Discover with a vote floor cuts that
+ * to the couple of dozen films really on screens.
+ */
 export const getNowPlaying = (page = 1) =>
-  tmdbFetch<Paged<MovieSummary>>('/movie/now_playing', { region: 'US', page: String(page) })
+  tmdbFetch<Paged<MovieSummary>>('/discover/movie', {
+    region: 'US',
+    with_release_type: '3|2', // theatrical + limited
+    'release_date.gte': daysAgo(45),
+    'release_date.lte': daysAgo(0),
+    'vote_count.gte': '25',
+    sort_by: 'popularity.desc',
+    include_adult: 'false',
+    page: String(page),
+  })
 
 export const getUpcoming = (page = 1) =>
   tmdbFetch<Paged<MovieSummary>>('/movie/upcoming', { region: 'US', page: String(page) })
@@ -79,7 +119,7 @@ export const searchMovies = (query: string, page = 1) =>
 
 export const getMovieDetail = (id: number) =>
   tmdbFetch<MovieDetail>(`/movie/${id}`, {
-    append_to_response: 'release_dates,watch/providers',
+    append_to_response: 'release_dates,watch/providers,videos',
   })
 
 export interface ProviderCatalogEntry {

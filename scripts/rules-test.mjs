@@ -121,6 +121,16 @@ check('client CANNOT write the global movies snapshot', r.status === 403, `got H
 r = await req(alice.idToken, 'GET', `/movies/${MOVIE}`)
 check('client CAN read the global movies snapshot', r.status === 404 || r.ok, `got HTTP ${r.status}`)
 
+// The alert history is checker-written; a client must never be able to invent
+// an update, and must never see anyone else's.
+r = await req(alice.idToken, 'PATCH', `/users/${alice.localId}/events/fake1`, {
+  fields: { headline: { stringValue: 'Free money' }, movieId: { integerValue: '1' } },
+})
+check('client CANNOT fabricate an update event', r.status === 403, `got HTTP ${r.status}`)
+
+r = await req(bob.idToken, 'GET', `/users/${alice.localId}/events/anything`)
+check('another user CANNOT read your updates', r.status === 403, `got HTTP ${r.status}`)
+
 // 10. Own delete (also cleans up)
 r = await req(alice.idToken, 'DELETE', `/users/${alice.localId}/watchlist/${MOVIE}`)
 check('user can remove their own watchlist entry', r.ok)

@@ -4,7 +4,6 @@
 //
 // Env: TMDB_TOKEN (v4 read token), FIREBASE_SERVICE_ACCOUNT (service-account
 // JSON, either raw JSON or a path to a .json file).
-import { readFileSync } from 'node:fs'
 import { initializeApp, cert } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
@@ -17,50 +16,14 @@ import {
   shouldCheck,
   NOTIFY_TYPES,
 } from './lib/availability.mjs'
+import { isQuietNow } from './lib/quiet-hours.mjs'
+import { loadServiceAccount, loadTmdbToken } from './lib/credentials.mjs'
 
 // A movie with nothing left to notify still gets re-checked this often, so
 // badges stay honest and no TMDB content is cached beyond its 6-month limit.
 const STALE_DAYS = 14
 const FETCH_CONCURRENCY = 8 // TMDB allows ~50 req/s; this is deliberately gentle
 const GET_ALL_CHUNK = 300
-
-// Diagnostics describe the shape of the value, never its contents — these
-// messages end up in public CI logs.
-function loadServiceAccount() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT
-  if (!raw || !raw.trim()) {
-    throw new Error(
-      'FIREBASE_SERVICE_ACCOUNT is not set. In CI, add it as a repository secret ' +
-        '(Settings > Secrets and variables > Actions) containing the whole ' +
-        'service-account JSON. Locally, set it to the JSON or a path to the file.',
-    )
-  }
-
-  const looksLikeJson = raw.trim().startsWith('{')
-  let text = raw
-  if (!looksLikeJson) {
-    try {
-      text = readFileSync(raw.trim(), 'utf8')
-    } catch {
-      throw new Error(
-        `FIREBASE_SERVICE_ACCOUNT is set (${raw.length} chars) but is neither JSON ` +
-          `(it starts with "${raw.trim()[0]}") nor a readable file path. Paste the raw ` +
-          'JSON file contents — not base64, not a quoted string.',
-      )
-    }
-  }
-
-  let parsed
-  try {
-    parsed = JSON.parse(text)
-  } catch (err) {
-    throw new Error(`FIREBASE_SERVICE_ACCOUNT is not valid JSON: ${err.message}`)
-  }
-  for (const field of ['project_id', 'private_key', 'client_email']) {
-    if (!parsed[field]) throw new Error(`FIREBASE_SERVICE_ACCOUNT is missing "${field}"`)
-  }
-  return parsed
-}
 
 async function fetchMovie(id, token) {
   const res = await fetch(
@@ -93,20 +56,7 @@ const chunk = (arr, size) =>
   )
 
 async function main() {
-  const tmdbToken = process.env.TMDB_TOKEN?.trim()
-  if (!tmdbToken) {
-    throw new Error(
-      'TMDB_TOKEN is not set. In CI, add it as a repository secret. It must be the ' +
-        'v4 "API Read Access Token" (a long JWT), not the short v3 API key.',
-    )
-  }
-  if (!tmdbToken.startsWith('ey')) {
-    throw new Error(
-      `TMDB_TOKEN does not look like a v4 read token (${tmdbToken.length} chars, ` +
-        'expected a JWT starting "ey"). The short v3 API key will not work — this ' +
-        'script sends it as a Bearer token.',
-    )
-  }
+  const tmdbToken = loadTmdbToken()
 
   initializeApp({ credential: cert(loadServiceAccount()) })
   const db = getFirestore()
@@ -153,14 +103,20 @@ async function main() {
     }
   })
 
-  // Which services each user subscribes to; empty/absent means "any service".
-  const servicesCache = new Map()
-  async function servicesFor(uid) {
-    if (!servicesCache.has(uid)) {
+  // Per-user prefs: subscribed services (empty means "any"), plus timezone and
+  // quiet hours. One read per user per run, cached.
+  const prefsCache = new Map()
+  async function prefsFor(uid) {
+    if (!prefsCache.has(uid)) {
       const doc = await db.collection('users').doc(uid).get()
-      servicesCache.set(uid, doc.exists ? (doc.data().services ?? []) : [])
+      const d = doc.exists ? doc.data() : {}
+      prefsCache.set(uid, {
+        services: d.services ?? [],
+        timezone: d.timezone ?? 'UTC',
+        quietHours: d.quietHours,
+      })
     }
-    return servicesCache.get(uid)
+    return prefsCache.get(uid)
   }
 
   const tokenCache = new Map()
@@ -175,8 +131,10 @@ async function main() {
     return tokenCache.get(uid)
   }
 
+  const runAt = new Date()
   let checked = 0
   let sent = 0
+  let deferred = 0
 
   for (const { id: movieId, movie } of fetched) {
     if (!movie) continue
@@ -186,9 +144,13 @@ async function main() {
     const posterPath = movie.poster_path ?? null
 
     for (const watcher of byMovie.get(movieId)) {
+      // Already seen it — never alert, but keep the badge fresh below.
+      const done = Boolean(watcher.watchedAt)
+
       // "Free with subscription" is the one event that depends on who's asking:
       // landing on Max means nothing to someone who doesn't have Max.
-      const services = await servicesFor(watcher.uid)
+      const { services, timezone, quietHours } = await prefsFor(watcher.uid)
+      const quiet = isQuietNow(quietHours, timezone, runAt)
       const flags = {
         digital: state.digitalReleased,
         rentBuy: state.rentBuy,
@@ -199,11 +161,20 @@ async function main() {
       for (const type of NOTIFY_TYPES) {
         // `notified` is the send-guard: an event fires at most once per user per
         // movie, so a provider flapping or a missed run never double-notifies.
-        if (!flags[type] || !watcher.notify?.[type] || watcher.notified?.[type]) continue
+        if (done || !flags[type] || !watcher.notify?.[type] || watcher.notified?.[type]) continue
+
+        // Inside quiet hours we hold everything back — crucially without
+        // marking it notified, so a later run delivers it rather than the
+        // alert being silently swallowed.
+        if (quiet) {
+          deferred++
+          continue
+        }
+
+        const msg = composeMessage(type, movie.title, state, services)
 
         const tokens = await tokensFor(watcher.uid)
         if (tokens.length) {
-          const msg = composeMessage(type, movie.title, state, services)
           const res = await messaging.sendEachForMulticast({
             tokens: tokens.map((t) => t.token),
             data: { title: msg.title, body: msg.body, movieId: String(movieId), type },
@@ -222,6 +193,23 @@ async function main() {
             `notify uid=${watcher.uid} "${movie.title}" type=${type} ok=${res.successCount}/${tokens.length}`,
           )
         }
+        // Durable record of the alert, whether or not a push went out — a
+        // notification missed on a lock screen is still findable in the app.
+        await db
+          .collection('users')
+          .doc(watcher.uid)
+          .collection('events')
+          .add({
+            movieId,
+            title: movie.title,
+            posterPath,
+            type,
+            headline: msg.title,
+            body: msg.body,
+            createdAt: FieldValue.serverTimestamp(),
+            readAt: null,
+          })
+
         // Marked even with zero tokens: the event has passed, so don't ambush
         // them with a stale alert the day they finally enable notifications.
         await watcher.ref.update({ [`notified.${type}`]: FieldValue.serverTimestamp() })
@@ -250,7 +238,10 @@ async function main() {
     )
   }
 
-  console.log(`Done. Checked ${checked} movies, sent ${sent} notifications.`)
+  console.log(
+    `Done. Checked ${checked} movies, sent ${sent} notifications` +
+      (deferred ? `, deferred ${deferred} for quiet hours.` : "."),
+  )
 }
 
 await main()

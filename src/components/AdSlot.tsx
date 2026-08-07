@@ -42,6 +42,11 @@ export function AdSlot({ slot }: { slot: string }) {
   }, [])
 
   if (!CLIENT) {
+    // Real users should never see a fake ad box — it reads as an unfinished
+    // app. The placeholder stays in dev so the reserved space is visible while
+    // designing, and rendering nothing in production is safe because the slot
+    // has no surrounding layout depending on its height.
+    if (!import.meta.env.DEV) return null
     return (
       <div className="ad-slot">
         <div className="ad-placeholder">Ad</div>

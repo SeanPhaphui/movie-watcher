@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { searchMovies } from '../lib/tmdb'
-import { useTmdbQuery } from '../hooks/useTmdbQuery'
+import { usePagedTmdb, useInfiniteScroll } from '../hooks/usePagedTmdb'
 import { MovieGrid } from '../components/MovieCard'
 import { SearchIcon } from '../components/Icons'
 
@@ -13,9 +13,11 @@ export function Search() {
     return () => clearTimeout(t)
   }, [input])
 
-  const { data, loading } = useTmdbQuery(query ? `search:${query}` : null, () =>
-    searchMovies(query),
+  const { items, loading, loadingMore, hasMore, loadMore } = usePagedTmdb(
+    query ? `search:${query}` : null,
+    (page) => searchMovies(query, page),
   )
+  const sentinel = useInfiniteScroll(loadMore, hasMore && !loading && !loadingMore)
 
   return (
     <div className="page">
@@ -32,8 +34,14 @@ export function Search() {
       </div>
 
       {loading && <div className="spinner" />}
-      {data && data.results.length > 0 && <MovieGrid movies={data.results} />}
-      {data && data.results.length === 0 && (
+      {items.length > 0 && (
+        <>
+          <MovieGrid movies={items} />
+          <div ref={sentinel} />
+          {loadingMore && <div className="spinner" />}
+        </>
+      )}
+      {query && !loading && items.length === 0 && (
         <div className="empty-state">
           <div className="big">No matches</div>
           Try a different title.

@@ -112,6 +112,82 @@ img {
   color: var(--ink-faint);
 }
 
+.header-bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--ink-dim);
+  align-self: center;
+  transition: color 0.18s, background 0.18s;
+}
+.header-bell:hover { color: var(--ink); background: var(--bg-raised); }
+.bell-dot {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--gold);
+  color: #16110a;
+  font-size: 0.62rem;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+/* ── updates ── */
+.update-row {
+  display: flex;
+  gap: 14px;
+  padding: 15px 12px 15px 10px;
+  margin: 0 -10px;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 10px;
+  transition: background 0.18s;
+}
+.update-row:hover { background: var(--bg-raised); }
+.update-row.unread {
+  background: linear-gradient(90deg, rgba(246, 183, 74, 0.07), transparent 60%);
+}
+.update-row.unread::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  align-self: center;
+  flex-shrink: 0;
+  margin-left: -4px;
+}
+.update-row .thumb {
+  width: 48px;
+  aspect-ratio: 2 / 3;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+}
+.update-row .thumb img { width: 100%; height: 100%; object-fit: cover; }
+.update-body { flex: 1; min-width: 0; }
+.update-headline { font-weight: 700; font-size: 0.92rem; line-height: 1.35; }
+.update-body p {
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+  line-height: 1.5;
+  margin-top: 3px;
+}
+.update-time {
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  margin-top: 5px;
+}
+
 /* ── page scaffolding ── */
 .page {
   padding: 8px 20px 28px;
@@ -246,6 +322,33 @@ img {
 }
 
 /* ── movie detail ── */
+/* Floating back affordance — the detail page hides the header, and an
+   installed PWA has no browser chrome to fall back on. */
+.back-btn {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: 12px;
+  z-index: 900;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ink);
+  background: rgba(13, 11, 14, 0.68);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line-soft);
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.45);
+  transition: background 0.18s, transform 0.12s;
+}
+.back-btn:hover { background: rgba(28, 23, 33, 0.9); }
+.back-btn:active { transform: scale(0.92); }
+
+@media (min-width: 720px) {
+  /* Keep it beside the centred column rather than pinned to the viewport. */
+  .back-btn { left: max(12px, calc(50% - 340px - 52px)); }
+}
+
 .backdrop {
   position: relative;
   margin: 0 -20px;
@@ -648,6 +751,161 @@ img {
   line-height: 1.55;
 }
 .settings-card .btn { margin-top: 14px; }
+
+/* ── watchlist filter chips + sort ── */
+.chip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin: 16px 0 10px;
+  scrollbar-width: none;
+}
+.chip-row::-webkit-scrollbar { display: none; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  transition: color 0.18s, background 0.18s, border-color 0.18s;
+}
+.chip.on {
+  color: var(--gold);
+  background: var(--gold-glow);
+  border-color: var(--gold-deep);
+}
+.chip-count {
+  font-size: 0.7rem;
+  font-weight: 800;
+  opacity: 0.65;
+}
+
+.sort-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 0.78rem;
+  color: var(--ink-faint);
+}
+.sort-row select {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  padding: 6px 10px;
+}
+
+.watch-item.watched .thumb img { opacity: 0.4; }
+.watch-item.watched .watch-title { color: var(--ink-faint); }
+
+/* ── rating ring ── */
+.rating {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.rating svg { display: block; }
+.rating-track {
+  fill: none;
+  stroke: var(--bg-elevated);
+  stroke-width: 3;
+}
+.rating-arc {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.5s ease;
+}
+.rating-num {
+  position: absolute;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+.rating-good { color: var(--green); }
+.rating-ok { color: var(--gold); }
+.rating-poor { color: var(--red); }
+
+.detail-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+/* ── trailer ── */
+.trailer {
+  display: block;
+  position: relative;
+  width: 100%;
+  margin-top: 18px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-soft);
+}
+.trailer iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+.trailer-cover { padding: 0; cursor: pointer; }
+.trailer-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.66;
+  transition: opacity 0.25s, transform 0.35s;
+}
+.trailer-cover:hover img { opacity: 0.82; transform: scale(1.02); }
+.trailer-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #16110a;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  padding-left: 3px;
+}
+.trailer-label {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+}
+
+.list-end {
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+  padding: 22px 0 4px;
+}
 
 /* ── notification nudge ── */
 .notify-prompt {

@@ -5,9 +5,73 @@ import { BellIcon } from '../components/Icons'
 import { showIntro } from '../components/IntroSheet'
 import { ServicePicker } from '../components/ServicePicker'
 
+const HOURS = Array.from({ length: 24 }, (_, h) => h)
+const hourLabel = (h: number) =>
+  h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`
+
+function QuietHoursCard() {
+  const { quietHours, setQuietHours } = useApp()
+
+  return (
+    <div className="settings-card">
+      <h3>Quiet hours</h3>
+      <p>
+        Hold notifications overnight. Anything that lands during these hours is delivered
+        afterwards rather than dropped.
+      </p>
+
+      <div className="toggle-card">
+        <button
+          className="toggle-row"
+          role="switch"
+          aria-checked={quietHours.enabled}
+          onClick={() => setQuietHours({ ...quietHours, enabled: !quietHours.enabled })}
+        >
+          <span>
+            <span className="t-label">Pause overnight</span>
+            <div className="t-sub">
+              Uses this device&rsquo;s time zone ({Intl.DateTimeFormat().resolvedOptions().timeZone})
+            </div>
+          </span>
+          <span className={`switch${quietHours.enabled ? ' on' : ''}`} />
+        </button>
+      </div>
+
+      {quietHours.enabled && (
+        <div className="sort-row" style={{ marginTop: 12 }}>
+          <label htmlFor="q-start">From</label>
+          <select
+            id="q-start"
+            value={quietHours.start}
+            onChange={(e) => setQuietHours({ ...quietHours, start: Number(e.target.value) })}
+          >
+            {HOURS.map((h) => (
+              <option key={h} value={h}>
+                {hourLabel(h)}
+              </option>
+            ))}
+          </select>
+          <label htmlFor="q-end">to</label>
+          <select
+            id="q-end"
+            value={quietHours.end}
+            onChange={(e) => setQuietHours({ ...quietHours, end: Number(e.target.value) })}
+          >
+            {HOURS.map((h) => (
+              <option key={h} value={h}>
+                {hourLabel(h)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Settings() {
   const { uid, services } = useApp()
-  const [status, setStatus] = useState<PushStatus>(getPushStatus())
+  const [status, setStatus] = useState<PushStatus>(getPushStatus)
   const [busy, setBusy] = useState(false)
 
   async function onEnable() {
@@ -63,6 +127,8 @@ export function Settings() {
         )}
       </div>
 
+      <QuietHoursCard />
+
       <div className="settings-card">
         <h3>My services</h3>
         <p>
@@ -87,8 +153,9 @@ export function Settings() {
       </div>
 
       <div className="notice">
-        Your watchlist lives in this browser&rsquo;s anonymous account. Clearing site data (or
-        deleting the app) erases it — account sync is on the roadmap.
+        Your watchlist lives in this browser&rsquo;s anonymous account, so there&rsquo;s no
+        sign-up — but clearing site data erases it, and it won&rsquo;t follow you to another
+        device.
       </div>
 
       <div className="settings-card">

@@ -3,9 +3,15 @@
 
 export const NOTIFY_TYPES = ['digital', 'rentBuy', 'free']
 
-/** True if any watcher of this movie could still receive an alert. */
+/**
+ * True if any watcher of this movie could still receive an alert. Films the
+ * user has marked watched are done — no alert could be useful, and dropping
+ * them here also removes them from the checker's working set.
+ */
 export const hasPendingWatcher = (watchers) =>
-  watchers.some((w) => NOTIFY_TYPES.some((t) => w.notify?.[t] && !w.notified?.[t]))
+  watchers.some(
+    (w) => !w.watchedAt && NOTIFY_TYPES.some((t) => w.notify?.[t] && !w.notified?.[t]),
+  )
 
 /**
  * Whether a movie needs a TMDB fetch this run. Movies nobody can be notified

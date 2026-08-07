@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { getNowPlaying, getUpcoming } from '../lib/tmdb'
-import { useTmdbQuery } from '../hooks/useTmdbQuery'
+import { usePagedTmdb, useInfiniteScroll } from '../hooks/usePagedTmdb'
 import { MovieGrid } from '../components/MovieCard'
 import { AdSlot } from '../components/AdSlot'
 
@@ -8,9 +8,10 @@ type Tab = 'theaters' | 'upcoming'
 
 export function Home() {
   const [tab, setTab] = useState<Tab>('theaters')
-  const { data, loading, error } = useTmdbQuery(tab, () =>
-    tab === 'theaters' ? getNowPlaying() : getUpcoming(),
+  const { items, loading, loadingMore, error, hasMore, loadMore } = usePagedTmdb(tab, (page) =>
+    tab === 'theaters' ? getNowPlaying(page) : getUpcoming(page),
   )
+  const sentinel = useInfiniteScroll(loadMore, hasMore && !loading && !loadingMore)
 
   return (
     <div className="page">
@@ -30,13 +31,21 @@ export function Home() {
       </div>
 
       {loading && <div className="spinner" />}
-      {error && (
+      {error && !items.length && (
         <div className="empty-state">
           <div className="big">Couldn&rsquo;t load movies</div>
           {error}
         </div>
       )}
-      {data && <MovieGrid movies={data.results} />}
+
+      {items.length > 0 && (
+        <>
+          <MovieGrid movies={items} />
+          <div ref={sentinel} />
+          {loadingMore && <div className="spinner" />}
+          {!hasMore && <p className="list-end">That&rsquo;s everything.</p>}
+        </>
+      )}
 
       <AdSlot slot="home-feed" />
     </div>

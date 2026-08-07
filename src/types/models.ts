@@ -21,6 +21,8 @@ export interface WatchlistEntry {
   posterPath: string | null
   releaseDate: string | null
   addedAt: Timestamp | null
+  /** Set once the user has seen it; excludes the film from all future alerts. */
+  watchedAt?: Timestamp | null
   /** Denormalized by the checker so badges cost no extra reads. */
   status?: WatchStatus
   notify: NotifyPrefs
@@ -35,6 +37,22 @@ export interface ProviderInfo {
   id: number
   name: string
   logoPath: string | null
+}
+
+/**
+ * One delivered alert, written by the checker to `users/{uid}/events`.
+ * Push is fire-and-forget; this is the durable record so a notification missed
+ * on a lock screen is still discoverable in the app.
+ */
+export interface UpdateEvent {
+  movieId: number
+  title: string
+  posterPath: string | null
+  type: NotifyType
+  headline: string
+  body: string
+  createdAt: Timestamp | null
+  readAt?: Timestamp | null
 }
 
 /** Global `movies/{id}` snapshot written by the availability checker. */

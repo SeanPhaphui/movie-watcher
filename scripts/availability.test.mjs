@@ -254,6 +254,18 @@ test('watcher with all toggles off is not pending', () => {
   assert.equal(hasPendingWatcher([watcher({ digital: false, rentBuy: false, free: false })]), false)
 })
 
+test('a film marked watched is never pending, whatever the toggles say', () => {
+  const w = { ...watcher({ digital: true, rentBuy: true, free: true }), watchedAt: '2026-08-01' }
+  assert.equal(hasPendingWatcher([w]), false)
+  assert.equal(shouldCheck([w], days(1), NOW), false)
+})
+
+test('one unwatched watcher still keeps a movie live for everyone else', () => {
+  const seen = { ...watcher({ digital: true }), watchedAt: '2026-08-01' }
+  const unseen = watcher({ digital: true })
+  assert.equal(hasPendingWatcher([seen, unseen]), true)
+})
+
 test('one pending watcher among many settled ones keeps the movie live', () => {
   const watchers = [
     watcher({ digital: true, free: true }, { digital: 1, free: 1 }),

@@ -58,13 +58,15 @@ try {
   })
 
   onBackgroundMessage(getMessaging(app), (payload) => {
-    const { title, body, movieId } = payload.data ?? {}
+    const { title, body, movieId, tag, url } = payload.data ?? {}
     self.registration.showNotification(title ?? 'Marquee', {
       body: body ?? '',
       icon: '/icons/pwa-192.png',
       badge: '/icons/pwa-192.png',
-      tag: `movie-${movieId ?? 'general'}`,
-      data: { movieId },
+      // Per-movie alerts collapse by movie; broadcasts carry their own unique
+      // tag so two announcements don't silently replace one another.
+      tag: tag ?? `movie-${movieId ?? 'general'}`,
+      data: { movieId, url },
     })
   })
 } catch (err) {
@@ -74,8 +76,8 @@ try {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const movieId = (event.notification.data as { movieId?: string } | undefined)?.movieId
-  const target = movieId ? `/movie/${movieId}` : '/my-movies'
+  const data = event.notification.data as { movieId?: string; url?: string } | undefined
+  const target = data?.url ?? (data?.movieId ? `/movie/${data.movieId}` : '/my-movies')
   event.waitUntil(
     (async () => {
       const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })

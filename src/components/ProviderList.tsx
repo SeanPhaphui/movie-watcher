@@ -61,7 +61,20 @@ export function ProviderList({ availability }: { availability: UsAvailability })
           <ProviderGroup label="Free / with ads" providers={freeAds} markMine />
           <ProviderGroup label="Rent or buy" providers={rentBuy} />
           {link && (
-            <a className="watch-link" href={link} target="_blank" rel="noopener noreferrer">
+            <a
+              className="watch-link"
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                // Installed iOS PWAs silently ignore target="_blank", so the
+                // link appears dead. Open it explicitly and fall back to
+                // navigating this window if the popup is blocked.
+                e.preventDefault()
+                const w = window.open(link, '_blank', 'noopener,noreferrer')
+                if (!w) window.location.href = link
+              }}
+            >
               Open watch options ↗
             </a>
           )}

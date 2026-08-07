@@ -93,21 +93,76 @@ npm run deploy    # build + firebase deploy (hosting + firestore rules)
 ## Notification checker (GitHub Actions)
 
 Push this repo to GitHub, then add two **repository secrets** (Settings → Secrets and
-variables → Actions):
+variables → Actions → *Repository secrets*):
 
 - `TMDB_TOKEN` — same TMDB read token
 - `FIREBASE_SERVICE_ACCOUNT` — Firebase Console → Project settings → Service accounts →
   **Generate new private key**; paste the entire JSON as the secret value
 
+> These must be **Secrets**, not **Variables**. Variables are stored unencrypted and are
+> never masked in workflow logs — and this repo is public, so a service-account key placed
+> there is one careless `${{ vars.* }}` reference away from being published. They must also
+> be *repository* secrets, not *environment* secrets, since this workflow declares no
+> environment. The `Preflight` step in the workflow fails with a precise message if either
+> is missing or malformed.
+
+Setting them from PowerShell? Pipe with a BOM-free encoding — PowerShell 5.1 otherwise
+prefixes stdin with a UTF-8 BOM and `JSON.parse` chokes on it:
+
+```powershell
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::ReadAllText("key.json") | gh secret set FIREBASE_SERVICE_ACCOUNT
+```
+
 The workflow runs on a schedule and can be fired manually from the Actions tab
 (**Check streaming availability → Run workflow**) — useful for end-to-end testing.
 Run it locally with `TMDB_TOKEN=... FIREBASE_SERVICE_ACCOUNT=path\to\key.json npm run check`.
+
+### Sending an announcement to everyone
+
+```sh
+npm run announce -- "Search just got faster" "Results now load instantly."          # dry run
+npm run announce -- "Search just got faster" "Results now load instantly." --send   # deliver
+npm run announce -- "Push is working" "You're all set." --uid <your-uid> --send     # your device only
+npm run announce -- "3 films hit streaming" "Take a look." --url my-movies --send   # deep-link the tap
+```
+
+**Don't put "Marquee" in the title.** iOS adds its own mandatory `from Marquee` attribution
+line to every web push, so an app-name title renders as "Marquee / from Marquee" and wastes
+the most valuable line. Lead with the news instead — that's why the checker titles alerts
+with the film ("Dune: Part Two is streaming now").
+
+It is a **dry run unless you pass `--send`** — it prints the audience size and exits,
+because the failure mode is messaging real people with no undo. Dead tokens are pruned
+automatically from the send result, and sends are batched at FCM's 500-token limit.
+
+Credentials are picked up from `FIREBASE_SERVICE_ACCOUNT`, or a `FIREBASE_SERVICE_ACCOUNT=`
+line in `.env.local`, or `./service-account.json`. That variable has no `VITE_` prefix, so
+Vite never exposes it to the browser bundle.
+
+Pass `--url` **without** a leading slash. Git Bash rewrites `/my-movies` into a Windows path,
+and the script refuses that rather than shipping a broken link to every device.
 
 To see what the checker has recorded and why a notification did or didn't fire:
 
 ```sh
 FIREBASE_SERVICE_ACCOUNT=path\to\key.json npm run inspect -- <uid>
 ```
+
+### Quiet hours
+
+`users/{uid}.timezone` (refreshed every launch, so it follows the user when they travel) plus
+`users/{uid}.quietHours` gate delivery. Inside the window the checker **skips the send without
+marking `notified`**, so a later run delivers it — deferring must never look like sending, or
+the alert is lost forever. With runs every 6 hours, any window under ~18 hours is guaranteed a
+delivery slot. See `isQuietNow` in [scripts/lib/quiet-hours.mjs](scripts/lib/quiet-hours.mjs).
+
+### Alert history
+
+Push is fire-and-forget, so the checker also appends every alert to
+`users/{uid}/events`. That's the durable record behind the Updates screen — a notification
+missed on a lock screen is still findable. Rules let clients read and mark items read but
+never create one.
 
 ### Per-user services
 

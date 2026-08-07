@@ -1,4 +1,4 @@
-import { getMessaging, getToken, isSupported } from 'firebase/messaging'
+import { getMessaging, getToken, isSupported, onMessage } from 'firebase/messaging'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { app, db } from './firebase'
 
@@ -25,6 +25,28 @@ async function sha1(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+let foregroundBound = false
+
+/**
+ * FCM routes messages to onBackgroundMessage only when no tab is focused, so
+ * without this a push that arrives while the app is open vanishes silently.
+ * We render it through the same service-worker registration for consistency.
+ */
+function bindForegroundMessages(registration: ServiceWorkerRegistration) {
+  if (foregroundBound) return
+  foregroundBound = true
+  onMessage(getMessaging(app), (payload) => {
+    const { title, body, movieId, tag, url } = payload.data ?? {}
+    registration.showNotification(title ?? 'Marquee', {
+      body: body ?? '',
+      icon: '/icons/pwa-192.png',
+      badge: '/icons/pwa-192.png',
+      tag: tag ?? `movie-${movieId ?? 'general'}`,
+      data: { movieId, url },
+    })
+  })
+}
+
 async function registerToken(uid: string): Promise<boolean> {
   if (!(await isSupported())) return false
   const registration = await navigator.serviceWorker.ready
@@ -34,6 +56,7 @@ async function registerToken(uid: string): Promise<boolean> {
     serviceWorkerRegistration: registration,
   })
   if (!token) return false
+  bindForegroundMessages(registration)
   await setDoc(
     doc(db, 'users', uid, 'fcmTokens', await sha1(token)),
     {

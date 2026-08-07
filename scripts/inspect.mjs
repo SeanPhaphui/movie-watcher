@@ -3,15 +3,11 @@
 //
 //   FIREBASE_SERVICE_ACCOUNT=path\to\key.json npm run inspect          # all movie snapshots
 //   FIREBASE_SERVICE_ACCOUNT=path\to\key.json npm run inspect -- <uid> # plus one user's watchlist
-import { readFileSync } from 'node:fs'
 import { initializeApp, cert } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
+import { loadServiceAccount } from './lib/credentials.mjs'
 
-const raw = process.env.FIREBASE_SERVICE_ACCOUNT
-if (!raw) throw new Error('FIREBASE_SERVICE_ACCOUNT not set')
-initializeApp({
-  credential: cert(JSON.parse(raw.trim().startsWith('{') ? raw : readFileSync(raw, 'utf8'))),
-})
+initializeApp({ credential: cert(loadServiceAccount()) })
 const db = getFirestore()
 
 const names = (l = []) => (l.length ? l.map((p) => p.name).join(', ') : '—')
