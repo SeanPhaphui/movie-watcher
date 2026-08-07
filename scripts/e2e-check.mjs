@@ -74,7 +74,24 @@ console.log('')
 const a = await wl(normal)
 check('normal user was notified it is streaming free', Boolean(a.notified?.free))
 check('normal user got a status badge', a.status?.kind === 'streaming', JSON.stringify(a.status))
-check('normal user has an update in their history', (await events(normal)).length > 0)
+const normalEvents = await events(normal)
+check('normal user has an update in their history', normalEvents.length > 0)
+// A film reaching streaming trips digital + rentBuy + free at once. The user
+// should hear about that once, not three times.
+check(
+  'one real-world event produced exactly one notification',
+  normalEvents.length === 1,
+  `got ${normalEvents.length}: ${normalEvents.map((d) => d.data().type).join(', ')}`,
+)
+check(
+  'it sent the most specific alert (free), not the vaguest',
+  normalEvents[0]?.data().type === 'free',
+  normalEvents[0]?.data().type,
+)
+check(
+  'the redundant types were still marked so they never fire later',
+  Boolean(a.notified?.digital) && Boolean(a.notified?.rentBuy),
+)
 
 const b = await wl(watched)
 check('watched film sent nothing', !b.notified?.free && !b.notified?.digital)

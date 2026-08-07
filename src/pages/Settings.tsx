@@ -164,6 +164,9 @@ export function Settings() {
           Movie data from TMDB. Streaming availability by JustWatch, via TMDB. This product uses
           the TMDB API but is not endorsed or certified by TMDB.
         </p>
+        {/* Not a secret — rules key off the authenticated uid, not knowledge of it.
+            Handy for support and for targeting a test notification at one device. */}
+        {uid && <p className="device-id">Device ID: {uid}</p>}
       </div>
     </div>
   )

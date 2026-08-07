@@ -56,7 +56,8 @@ interface AppState {
   untrack: (movieId: number) => Promise<void>
   setNotify: (movieId: number, type: NotifyType, value: boolean) => Promise<void>
   setWatched: (movieId: number, watched: boolean) => Promise<void>
-  toggleService: (providerId: number) => Promise<void>
+  /** Toggles a whole provider family at once (e.g. Netflix + its ad tier). */
+  toggleService: (providerIds: number[]) => Promise<void>
 }
 
 const DEFAULT_PREFS: NotifyPrefs = { digital: true, rentBuy: false, free: true }
@@ -152,11 +153,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await setDoc(doc(db, 'users', uid), { quietHours: q }, { merge: true })
       },
       isTracked: (movieId) => watchlist.has(movieId),
-      toggleService: async (providerId) => {
+      toggleService: async (providerIds) => {
         if (!uid) return
-        const next = services.includes(providerId)
-          ? services.filter((id) => id !== providerId)
-          : [...services, providerId]
+        // "On" means any id in the family is selected, so turning it off has to
+        // clear all of them and turning it on has to add all of them.
+        const isOn = providerIds.some((id) => services.includes(id))
+        const next = isOn
+          ? services.filter((id) => !providerIds.includes(id))
+          : [...new Set([...services, ...providerIds])]
         await setDoc(doc(db, 'users', uid), { services: next }, { merge: true })
       },
       track: async (movie) => {

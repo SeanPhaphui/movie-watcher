@@ -158,19 +158,26 @@ async function main() {
       }
       const status = deriveStatus(state, services)
 
-      for (const type of NOTIFY_TYPES) {
-        // `notified` is the send-guard: an event fires at most once per user per
-        // movie, so a provider flapping or a missed run never double-notifies.
-        if (done || !flags[type] || !watcher.notify?.[type] || watcher.notified?.[type]) continue
+      // `notified` is the send-guard: an event fires at most once per user per
+      // movie, so a provider flapping or a missed run never double-notifies.
+      const firing = done
+        ? []
+        : NOTIFY_TYPES.filter(
+            (t) => flags[t] && watcher.notify?.[t] && !watcher.notified?.[t],
+          )
 
-        // Inside quiet hours we hold everything back — crucially without
-        // marking it notified, so a later run delivers it rather than the
-        // alert being silently swallowed.
-        if (quiet) {
-          deferred++
-          continue
-        }
+      // Inside quiet hours we hold everything back — crucially without marking
+      // anything notified, so a later run delivers it rather than the alert
+      // being silently swallowed.
+      if (firing.length && quiet) deferred += firing.length
 
+      if (firing.length && !quiet) {
+        // A film reaching streaming makes several flags true in the same run —
+        // it is simultaneously "out digitally", "rentable" and "free on a
+        // service". Sending one push per flag means three near-identical
+        // notifications for a single real-world event, so send only the most
+        // specific one and mark the rest as told.
+        const type = ['free', 'rentBuy', 'digital'].find((t) => firing.includes(t))
         const msg = composeMessage(type, movie.title, state, services)
 
         const tokens = await tokensFor(watcher.uid)
@@ -210,9 +217,13 @@ async function main() {
             readAt: null,
           })
 
-        // Marked even with zero tokens: the event has passed, so don't ambush
-        // them with a stale alert the day they finally enable notifications.
-        await watcher.ref.update({ [`notified.${type}`]: FieldValue.serverTimestamp() })
+        // Every firing type is marked, not just the one we sent — the user has
+        // been told the film is available, so the others would be redundant
+        // later. Marked even with zero tokens, so nobody is ambushed by a stale
+        // alert the day they finally enable notifications.
+        const marks = {}
+        for (const t of firing) marks[`notified.${t}`] = FieldValue.serverTimestamp()
+        await watcher.ref.update(marks)
       }
 
       // Refresh the TMDB content and badge status held on the watchlist doc.

@@ -751,6 +751,13 @@ img {
   line-height: 1.55;
 }
 .settings-card .btn { margin-top: 14px; }
+.device-id {
+  margin-top: 10px;
+  font-size: 0.68rem !important;
+  color: var(--ink-faint) !important;
+  word-break: break-all;
+  user-select: all;
+}
 
 /* ── watchlist filter chips + sort ── */
 .chip-row {
