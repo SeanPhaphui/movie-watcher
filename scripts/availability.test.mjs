@@ -140,6 +140,58 @@ test('within the same tier, display_priority breaks the tie', () => {
   assert.equal(s.providers.flatrate[0].name, 'Disney Plus')
 })
 
+// ── pre-orders must not read as availability ──
+
+test('buy-only with no digital date is a pre-order, not availability', () => {
+  // Real data: Spider-Man: Brand New Day, nine days after theatrical release,
+  // listed to buy on Fandango with no type-4 digital date anywhere.
+  const s = computeState(
+    movie({ us: { buy: [provider(7, 'Fandango At Home')] }, dates: [{ type: 3, release_date: '2026-07-29T00:00:00.000Z' }] }),
+    TODAY,
+  )
+  assert.equal(s.rentBuy, false)
+  assert.equal(s.digitalReleased, false)
+  assert.equal(s.freeWithSub, false)
+  assert.equal(deriveStatus(s), null)
+})
+
+test('a rental listing is trusted on its own — you cannot rent an unreleased film', () => {
+  const s = computeState(movie({ us: { rent: [provider(2, 'Apple TV')] } }), TODAY)
+  assert.equal(s.rentBuy, true)
+  assert.equal(s.digitalReleased, true)
+})
+
+test('buy-only becomes real once the digital date has passed', () => {
+  const s = computeState(
+    movie({ us: { buy: [provider(7, 'Fandango At Home')] }, dates: [{ type: 4, release_date: '2026-07-15T00:00:00.000Z' }] }),
+    TODAY,
+  )
+  assert.equal(s.rentBuy, true)
+  assert.equal(s.digitalReleased, true)
+})
+
+test('a pre-order alongside a real subscription still counts as available', () => {
+  const s = computeState(
+    movie({ us: { buy: [provider(7, 'Fandango At Home')], flatrate: [provider(1899, 'HBO Max')] } }),
+    TODAY,
+  )
+  assert.equal(s.freeWithSub, true)
+  assert.equal(s.digitalReleased, true)
+  assert.equal(s.rentBuy, false, 'the purchase listing itself is still unproven')
+})
+
+// ── free tiers cost nothing, so they count for everyone ──
+
+test('a free/ad-supported tier alerts even when you picked other services', () => {
+  const s = computeState(movie({ us: { ads: [provider(73, 'Tubi TV')] } }), TODAY)
+  assert.equal(isOnMyServices(s, [8, 1899]), true, 'Tubi is free — no subscription needed')
+})
+
+test('a paid subscription you do not have still does not alert', () => {
+  const s = computeState(movie({ us: { flatrate: [provider(1899, 'HBO Max')] } }), TODAY)
+  assert.equal(isOnMyServices(s, [8]), false)
+})
+
 // ── per-user services: the "free" alert must respect what you subscribe to ──
 
 const NETFLIX = 8
@@ -162,10 +214,12 @@ test('title on a service you do NOT have does not fire', () => {
   assert.equal(isOnMyServices(s, [NETFLIX, DISNEY]), false)
 })
 
-test('ad-supported and free tiers count toward your services too', () => {
+test('an ad-supported tier alerts whether or not you selected it', () => {
+  // Changed deliberately: Freevee costs nothing, so withholding the alert from
+  // someone who only ticked Netflix would hide a film they can watch now.
   const s = computeState(movie({ us: { ads: [provider(613, 'Freevee')] } }), TODAY)
   assert.equal(isOnMyServices(s, [613]), true)
-  assert.equal(isOnMyServices(s, [NETFLIX]), false)
+  assert.equal(isOnMyServices(s, [NETFLIX]), true)
 })
 
 test('rent/buy availability never counts as being on your services', () => {

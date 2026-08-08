@@ -8,7 +8,9 @@ export interface UsAvailability {
   digitalDate: string | null
   streaming: ProviderInfo[] // flatrate — included with a subscription
   freeAds: ProviderInfo[] // free or ad-supported
-  rentBuy: ProviderInfo[]
+  rentBuy: ProviderInfo[] // everything a storefront lists, pre-orders included
+  rentable: ProviderInfo[] // rentals only — proof it has actually been released
+  preorderOnly: boolean
   link: string | null
 }
 
@@ -44,21 +46,40 @@ export function classifyUsAvailability(detail: MovieDetail): UsAvailability {
   }
 
   const us = detail['watch/providers']?.results?.US
+  const digitalDate = dateOf(4)
+  const rentable = dedupe([us?.rent ?? []])
+  const rentBuy = dedupe([us?.rent ?? [], us?.buy ?? []])
+  const digitalDatePassed =
+    digitalDate !== null && digitalDate <= new Date().toISOString().slice(0, 10)
+
   return {
     theatricalDate: dateOf(3) ?? dateOf(2), // theatrical, else limited
-    digitalDate: dateOf(4),
+    digitalDate,
     streaming: dedupe([us?.flatrate ?? []]),
     freeAds: dedupe([us?.free ?? [], us?.ads ?? []]),
-    rentBuy: dedupe([us?.rent ?? [], us?.buy ?? []]),
+    rentBuy,
+    rentable,
+    // Listed to buy, but nothing else says it is out yet.
+    preorderOnly: rentBuy.length > 0 && rentable.length === 0 && !digitalDatePassed,
     link: us?.link ?? null,
   }
 }
 
-export const isDigitallyAvailable = (a: UsAvailability) =>
-  a.streaming.length > 0 ||
-  a.freeAds.length > 0 ||
-  a.rentBuy.length > 0 ||
-  (a.digitalDate !== null && a.digitalDate <= new Date().toISOString().slice(0, 10))
+/**
+ * Mirrors the checker's rule in scripts/lib/availability.mjs. Storefronts list
+ * films for pre-order while they are still theatrical-only, so a purchase
+ * listing alone does not mean you can watch it — see the note there.
+ */
+export const isDigitallyAvailable = (a: UsAvailability) => {
+  const digitalDatePassed =
+    a.digitalDate !== null && a.digitalDate <= new Date().toISOString().slice(0, 10)
+  return (
+    a.streaming.length > 0 ||
+    a.freeAds.length > 0 ||
+    a.rentable.length > 0 ||
+    digitalDatePassed
+  )
+}
 
 export function formatDate(iso: string | null): string | null {
   if (!iso) return null

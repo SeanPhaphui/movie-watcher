@@ -42,7 +42,7 @@ function ProviderGroup({
 }
 
 export function ProviderList({ availability }: { availability: UsAvailability }) {
-  const { streaming, freeAds, rentBuy, link } = availability
+  const { streaming, freeAds, rentBuy, link, preorderOnly } = availability
   const none = !streaming.length && !freeAds.length && !rentBuy.length
 
   return (
@@ -59,7 +59,15 @@ export function ProviderList({ availability }: { availability: UsAvailability })
         <>
           <ProviderGroup label="Stream" providers={streaming} markMine />
           <ProviderGroup label="Free / with ads" providers={freeAds} markMine />
-          <ProviderGroup label="Rent or buy" providers={rentBuy} />
+          {/* A storefront listing a still-theatrical film is selling a
+              pre-order, not access — saying "rent or buy" would imply you
+              could watch it tonight. */}
+          <ProviderGroup label={preorderOnly ? 'Pre-order' : 'Rent or buy'} providers={rentBuy} />
+          {preorderOnly && (
+            <p className="preorder-note">
+              Available to pre-order only — it hasn&rsquo;t been released digitally yet.
+            </p>
+          )}
           {link && (
             <a
               className="watch-link"

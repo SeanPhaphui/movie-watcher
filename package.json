@@ -12,6 +12,7 @@
     "inspect": "node scripts/inspect.mjs",
     "test:push": "node scripts/test-push.mjs",
     "test:e2e": "node scripts/e2e-check.mjs",
+    "repair": "node scripts/repair-false-alerts.mjs",
     "announce": "node scripts/broadcast.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "check": "node scripts/check-availability.mjs",

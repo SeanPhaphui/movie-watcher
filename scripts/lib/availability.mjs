@@ -61,14 +61,26 @@ export function computeState(movie, today = new Date().toISOString().slice(0, 10
     .filter((d) => d.type === 4)
     .map((d) => d.release_date.slice(0, 10))
     .sort()
-  const anyProvider = Object.values(providers).some((l) => l.length > 0)
+  const digitalDatePassed = digitalDates.length > 0 && digitalDates[0] <= today
+
+  const onSubscription =
+    providers.flatrate.length > 0 || providers.free.length > 0 || providers.ads.length > 0
+
+  // Storefronts list films for PRE-ORDER while they are still theatrical-only.
+  // Spider-Man: Brand New Day showed up under `buy` on Fandango nine days after
+  // its theatrical release, with no digital release date at all — treating that
+  // as availability fires "you can watch this now" for a film you cannot.
+  //
+  // You can never rent a film that has not been released, so a rental listing
+  // is trustworthy on its own. A purchase listing is only trustworthy once a
+  // digital release date has actually passed.
+  const purchasable = providers.rent.length > 0 || (providers.buy.length > 0 && digitalDatePassed)
 
   return {
     providers,
-    digitalReleased: anyProvider || (digitalDates.length > 0 && digitalDates[0] <= today),
-    rentBuy: providers.rent.length > 0 || providers.buy.length > 0,
-    freeWithSub:
-      providers.flatrate.length > 0 || providers.free.length > 0 || providers.ads.length > 0,
+    digitalReleased: onSubscription || purchasable || digitalDatePassed,
+    rentBuy: purchasable,
+    freeWithSub: onSubscription,
   }
 }
 
@@ -92,11 +104,22 @@ export function pickSubscription(state, services = []) {
   return { provider: owned ?? subs[0], mine: Boolean(owned) }
 }
 
-/** Does this title stream on a service the user has? Unset services = any service. */
-export const isOnMyServices = (state, services = []) =>
-  services.length
-    ? subscriptionProviders(state).some((p) => services.includes(p.id))
+/**
+ * Can this user watch it without paying anything extra?
+ *
+ * Free and ad-supported tiers count for everyone: Tubi or Pluto costs nothing,
+ * so gating those behind "did you tick this service" would silently withhold
+ * an alert for something the user can watch right now. Only paid subscriptions
+ * are matched against what they actually pay for.
+ *
+ * An empty `services` list means "hasn't told us" and falls back to any service.
+ */
+export const isOnMyServices = (state, services = []) => {
+  if (state.providers.free.length > 0 || state.providers.ads.length > 0) return true
+  return services.length
+    ? state.providers.flatrate.some((p) => services.includes(p.id))
     : state.freeWithSub
+}
 
 /**
  * Compact badge status denormalized onto each watchlist doc, so the client
