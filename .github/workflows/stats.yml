@@ -1,0 +1,21 @@
+name: Usage stats
+
+# Run from the Actions tab (or `gh workflow run stats.yml`) and read the output
+# in the job log. Runs here rather than locally so the service-account key stays
+# a GitHub secret instead of sitting on a laptop.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/stats.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
