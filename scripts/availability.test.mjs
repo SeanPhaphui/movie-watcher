@@ -32,9 +32,10 @@ test('future digital date does not count as released', () => {
   assert.equal(s.digitalReleased, false)
 })
 
-test('past digital date counts as released even with no providers listed', () => {
+test('a past digital date alone is not availability — nobody is listing it', () => {
+  // Changed deliberately: an alert that cannot say where to watch it is noise.
   const s = computeState(movie({ dates: [{ type: 4, release_date: '2026-07-15T00:00:00.000Z' }] }), TODAY)
-  assert.equal(s.digitalReleased, true)
+  assert.equal(s.digitalReleased, false)
   assert.equal(s.rentBuy, false)
 })
 
@@ -138,6 +139,41 @@ test('within the same tier, display_priority breaks the tie', () => {
     TODAY,
   )
   assert.equal(s.providers.flatrate[0].name, 'Disney Plus')
+})
+
+// ── an alert must be able to say WHERE ──
+
+test('a passed digital date with no provider anywhere does not count as available', () => {
+  // Real case: The Invite. Its digital date had passed but no service listed
+  // it, so the alert said "it's out" and the app showed nowhere to watch it.
+  const s = computeState(movie({ dates: [{ type: 4, release_date: '2026-07-01T00:00:00.000Z' }] }), TODAY)
+  assert.equal(s.digitalReleased, false)
+  assert.equal(deriveStatus(s), null)
+})
+
+test('it becomes available the moment a service actually lists it', () => {
+  const s = computeState(
+    movie({ us: { rent: [provider(10, 'Amazon Video')] }, dates: [{ type: 4, release_date: '2026-07-01T00:00:00.000Z' }] }),
+    TODAY,
+  )
+  assert.equal(s.digitalReleased, true)
+})
+
+test('the digital alert says "rent or buy" when there is no subscription', () => {
+  // Real case: Backrooms — rent/buy only. Saying "streaming" sent people
+  // looking for a service that did not carry it.
+  const s = computeState(movie({ us: { rent: [provider(10, 'Amazon Video')], buy: [provider(10, 'Amazon Video')] } }), TODAY)
+  const msg = composeMessage('digital', 'Backrooms', s, [])
+  assert.doesNotMatch(msg.title, /streaming/i)
+  assert.match(msg.body, /Rent or buy it on Amazon Video/)
+  assert.match(msg.body, /no subscription service has it yet/i)
+})
+
+test('the digital alert does say streaming when a subscription carries it', () => {
+  const s = computeState(movie({ us: { flatrate: [provider(1899, 'HBO Max')] } }), TODAY)
+  const msg = composeMessage('digital', 'Dune', s, [])
+  assert.match(msg.title, /streaming now/)
+  assert.match(msg.body, /HBO Max/)
 })
 
 // ── pre-orders must not read as availability ──
@@ -271,9 +307,9 @@ test('rent/buy only yields a rentBuy badge naming the store', () => {
   assert.deepEqual(deriveStatus(s), { kind: 'rentBuy', service: 'Apple TV', mine: false })
 })
 
-test('digital date passed with no providers yields a bare digital badge', () => {
+test('a date with no listing yields no badge, so the row still reads "in theaters"', () => {
   const s = computeState(movie({ dates: [{ type: 4, release_date: '2026-07-01T00:00:00.000Z' }] }), TODAY)
-  assert.deepEqual(deriveStatus(s), { kind: 'digital', service: null, mine: false })
+  assert.equal(deriveStatus(s), null)
 })
 
 test('nothing available yields null so the client falls back to release date', () => {
@@ -355,9 +391,10 @@ test('movie with no watchers left is not pending but still refreshed when stale'
   assert.equal(shouldCheck([], days(30), NOW, 14), true)
 })
 
-test('earliest of multiple digital dates wins', () => {
+test('earliest of multiple digital dates wins when validating a purchase listing', () => {
   const s = computeState(
     movie({
+      us: { buy: [provider(7, 'Fandango At Home')] },
       dates: [
         { type: 4, release_date: '2026-12-01T00:00:00.000Z' },
         { type: 4, release_date: '2026-06-01T00:00:00.000Z' },

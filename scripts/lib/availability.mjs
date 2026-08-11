@@ -78,7 +78,12 @@ export function computeState(movie, today = new Date().toISOString().slice(0, 10
 
   return {
     providers,
-    digitalReleased: onSubscription || purchasable || digitalDatePassed,
+    // A passed release date is NOT enough on its own. JustWatch often lags a
+    // day or two behind, and "it's out now" with nowhere to watch it is a
+    // notification the user can do nothing with — the whole point is telling
+    // them where. The film stays pending, so it fires as soon as a service
+    // actually lists it.
+    digitalReleased: onSubscription || purchasable,
     rentBuy: purchasable,
     freeWithSub: onSubscription,
   }
@@ -167,15 +172,22 @@ export function composeMessage(type, title, state, services = []) {
     }
   }
 
-  const svc = first([
-    state.providers.flatrate,
-    state.providers.free,
-    state.providers.ads,
-    state.providers.rent,
-    state.providers.buy,
-  ])
-  return {
-    title: `${title} left theaters for streaming`,
-    body: svc ? `Now available digitally — first spotted on ${svc}.` : 'Its digital release is out now.',
+  // The "digital release" alert covers any first digital availability, which is
+  // usually rent/buy well before any subscription. Saying "streaming" there
+  // sends people looking for a service that isn't carrying it yet, so the copy
+  // has to describe what is actually on offer.
+  const sub = first([state.providers.flatrate, state.providers.free, state.providers.ads])
+  if (sub) {
+    return { title: `${title} is streaming now`, body: `Watch it on ${sub}.` }
   }
+
+  const store = first([state.providers.rent, state.providers.buy])
+  if (store) {
+    return {
+      title: `${title} is out digitally`,
+      body: `Rent or buy it on ${store} — no subscription service has it yet.`,
+    }
+  }
+
+  return { title: `${title} is out digitally`, body: 'Its digital release is out now.' }
 }

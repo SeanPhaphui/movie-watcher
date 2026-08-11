@@ -73,11 +73,13 @@ export function classifyUsAvailability(detail: MovieDetail): UsAvailability {
 export const isDigitallyAvailable = (a: UsAvailability) => {
   const digitalDatePassed =
     a.digitalDate !== null && a.digitalDate <= new Date().toISOString().slice(0, 10)
+  // A passed date with no service listing it yet is not something the user can
+  // act on, so it does not count as available — matching the checker.
   return (
     a.streaming.length > 0 ||
     a.freeAds.length > 0 ||
     a.rentable.length > 0 ||
-    digitalDatePassed
+    (a.rentBuy.length > 0 && digitalDatePassed)
   )
 }
 
