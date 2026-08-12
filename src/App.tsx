@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context/AppContext'
 import { BottomNav } from './components/BottomNav'
 import { IntroSheet } from './components/IntroSheet'
 import { ScrollManager } from './components/ScrollManager'
+import { ConnectionBanner } from './components/ConnectionBanner'
 import { BellIcon } from './components/Icons'
 import { Home } from './pages/Home'
 import { Search } from './pages/Search'
@@ -35,6 +36,7 @@ export default function App() {
       <BrowserRouter>
         <ScrollManager />
         <Header />
+        <ConnectionBanner />
         <main>
           <Routes>
             <Route path="/" element={<Home />} />

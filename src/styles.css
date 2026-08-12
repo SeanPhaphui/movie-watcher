@@ -1236,3 +1236,24 @@ img {
   line-height: 1.5;
   color: var(--ink-faint);
 }
+
+/* ── connection failure ── */
+.conn-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 8px 20px 0;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--red);
+}
+.conn-banner strong { font-size: 0.92rem; }
+.conn-banner p {
+  margin-top: 3px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+.conn-banner .btn { flex-shrink: 0; margin-top: 0; }

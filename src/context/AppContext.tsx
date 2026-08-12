@@ -49,6 +49,11 @@ interface AppState {
   /** Alert history, newest first. */
   events: StoredEvent[]
   unreadCount: number
+  /**
+   * Set when we cannot reach Firestore or sign in. Without this an outage is
+   * indistinguishable from "your watchlist is empty", which reads as data loss.
+   */
+  connectionError: string | null
   quietHours: QuietHours
   setQuietHours: (q: QuietHours) => Promise<void>
   isTracked: (movieId: number) => boolean
@@ -71,6 +76,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [services, setServices] = useState<number[]>([])
   const [events, setEvents] = useState<StoredEvent[]>([])
   const [quiet, setQuiet] = useState<QuietHours>(DEFAULT_QUIET)
+  const [connectionError, setConnectionError] = useState<string | null>(
+    firebaseReady ? null : 'App is missing its configuration.',
+  )
 
   useEffect(() => {
     if (!firebaseReady) return
@@ -88,10 +96,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           },
           { merge: true },
         ).catch(() => {})
+        setConnectionError(null)
         refreshTokenIfGranted(user.uid)
       } else {
         signInAnonymously(auth).catch((err) => {
           console.error('anonymous sign-in failed', err)
+          setConnectionError(`Couldn't sign in (${err?.code ?? 'unknown'}).`)
           setReady(true)
         })
       }
@@ -113,7 +123,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Without this the SDK throws an unhandled rejection when Firestore is
       // unreachable or rules reject the read; the app should just show an
       // empty list instead.
-      (err) => console.error('watchlist listener failed', err),
+      (err) => {
+        console.error('watchlist listener failed', err)
+        setConnectionError(`Couldn't load your movies (${err?.code ?? 'unknown'}).`)
+      },
     )
   }, [uid])
 
@@ -123,7 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       query(collection(db, 'users', uid, 'events'), orderBy('createdAt', 'desc'), limit(50)),
       (snap) =>
         setEvents(snap.docs.map((d) => ({ id: d.id, ...(d.data() as UpdateEvent) }))),
-      (err) => console.error('events listener failed', err),
+      (err) => console.error('events listener failed', err),  // non-critical
     )
   }, [uid])
 
@@ -135,7 +148,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setServices((snap.data()?.services as number[] | undefined) ?? [])
         setQuiet({ ...DEFAULT_QUIET, ...(snap.data()?.quietHours as QuietHours | undefined) })
       },
-      (err) => console.error('user prefs listener failed', err),
+      (err) => {
+        console.error('user prefs listener failed', err)
+        setConnectionError(`Couldn't load your settings (${err?.code ?? 'unknown'}).`)
+      },
     )
   }, [uid])
 
@@ -147,6 +163,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       services,
       events,
       unreadCount: events.filter((e) => !e.readAt).length,
+      connectionError,
       quietHours: quiet,
       setQuietHours: async (q) => {
         if (!uid) return
@@ -192,7 +209,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })
       },
     }),
-    [uid, ready, watchlist, services, events, quiet],
+    [uid, ready, watchlist, services, events, quiet, connectionError],
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
